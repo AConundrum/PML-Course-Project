@@ -1,0 +1,79 @@
+---
+title: "PML Course Project"
+author: "Edward J Hopkins"
+date: "Wednesday, February 18, 2015"
+output: html_document
+---
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(caret)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(rattle)
+
+fname_raw <- "pml-training.csv"  # raw data set
+fname_valid <- "pml-testing.csv" # Validation data set
+Draw <- read.csv(fname_raw,na.strings=c("NA",""))
+Dvalid <- read.csv(fname_valid,na.strings=c("NA",""))
+```
+
+### Introduction
+Using devices such as *Jawbone Up, Nike FuelBand*, and *Fitbit* is now possible to collect a large amount of data about personal activity relatively inexpensively. These types of devices are part of the quantified self movement -- a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how *much* of a particular activity they do, but they rarely quantify *how well they do it*. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of the project is to predict the manner in which they did the excercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built the model, how you used cross validation, what you think the expected 'out of sample error' is, and why you made the choises you did. You will also use your prediction model to predict 20 different test cases.
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+The data set, `pml-training.csv`, is a series of measurements taken at from a number of different measurement devices across multiple human participants and across multiple classes of excercise.  The dataset contains `r  nlevels(factor(Draw$num_window))` sets of data which vary from a length of 1 to 32 timesteps. In addition, on the last timestep data point, in rows marked with `new_window='yes'`, a set of derived features calculated from the raw data points are given which are used to derive a pattern recognition algorithm. It is really disappointing that the researchers do not have a detailed description of the thought processes for their pattern recognition algorithm, however there is a little we can learn by reading their paper. These derived features, their selection, modeling, and prediction are how this data set is intended to studied. But when we look at the `pml-testing.csv` file, none of the cases have any derived features. They have all been thrown out the window, and we are forced to predict only based on a single raw data point.
+
+So as you can tell, I have a fundamental problem with how this project is setup.  This should be a pattern recognition excercise for a complete movement instead of correlating a single raw measurement and figuring out which time series it was pulled from.  This is not how the data set should be utilized.
+
+But now the task is really, really, easy, however irrelevant to real science and discovery...
+
+### Cleaning Data and Exploratory Data Analysis
+
+First, clean the data sets by removing all the derived feature columns.
+```{r}
+TTT <- Draw[,-(1:7)]                  # Remove 1st 7 columns
+TTT  <- TTT[, colSums(is.na(TTT))==0] # Remove columns that have NAs
+```
+Second, create training and testing data sets for future cross validation with a 60%/40% split
+```{r}
+inTrain <- createDataPartition(y=TTT$classe, p=0.6, list=FALSE)
+Training <- TTT[inTrain, ]
+Testing <- TTT[-inTrain, ]
+```
+
+The toughest decision is to determine what type of regression analysis should be done. Exploring the data via plots colored by `classe ` show a clustering pattern. The following plots are just a sample of the many combinations possible.  The clustering of data may imply that a *random forest* regression would be appropriate.
+
+```{r}
+ggplot(Training, aes(x=roll_belt, y=pitch_forearm, colour=classe)) + geom_point()
+ggplot(Training, aes(x=yaw_belt, y=magnet_dumbbell_z, colour=classe)) + geom_point()
+ggplot(Training, aes(x=magnet_dumbbell_y, y=pitch_belt, colour=classe)) + geom_point()
+ggplot(Training, aes(x=roll_forearm, y=accel_dumbbell_y, colour=classe)) + geom_point()
+```
+
+### Regression Modelling  
+
+Third, classify and regress the training data using a *random forest* algorithm utilizing cross validation with k=5 folds. A random forest algorithm is used based on clustering of the data seen during exploratory analysis. On my computer, this regression took about 7 1/2 minutes.
+```{r}
+cvCtrl <- trainControl(method = "cv", number = 5, allowParallel = TRUE, verboseIter = TRUE)
+#m1 <- train(classe ~ ., data = Training, method = "rf", trControl = cvCtrl)
+m1 <- readRDS("m1.rds") # The processing takes many minutes; read results from previously saved file 
+m1$times[1]
+```
+
+Fourth, predict and cross validate the model with the testing dataset. Because of the nature of the dataset, the predictions are almost perfect. There are only a few stray mistakes and the accuracy is over 99%.
+```{r}
+predictionsm1 <- predict(m1, Testing)
+confusionMatrix(predictionsm1, Testing$classe)
+```
+
+Fifth, predict against the validation data set, and output for the required submission. This should easily predict all 20 data points correctly.
+```{r}
+predictions <- predict(m1, Dvalid)
+predictions
+```
+### Conclusion
+In conclusion, I don't think this project builds an algorithm that can predict activity quality, all this algorithm does is determine (pretty well) which activity 'classe' a single time stamp was extracted from. I think this algorithm would be a very poor predictor with a completely new set of data. Jeez, this is just a load of crap.
